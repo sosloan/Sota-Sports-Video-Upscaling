@@ -3,11 +3,8 @@ name: Python Package using Conda
 on: [push]
 
 jobs:
-  build-linux:
+  lint:
     runs-on: ubuntu-latest
-    strategy:
-      max-parallel: 5
-
     steps:
     - uses: actions/checkout@v4
     
@@ -17,33 +14,50 @@ jobs:
         python-version: '3.10'
 
     - name: Add Conda to system path
-      run: |
-        echo $CONDA/bin >> $GITHUB_PATH
+      run: echo $CONDA/bin >> $GITHUB_PATH
     
     - name: Cache Conda packages
       uses: actions/cache@v3
       with:
         path: $CONDA/pkgs
         key: ${{ runner.os }}-conda-${{ hashFiles('environment.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-conda-
+        restore-keys: ${{ runner.os }}-conda-
     
     - name: Install dependencies
       run: |
         conda env create --file environment.yml --name myenv
         echo "conda activate myenv" >> $BASH_ENV
-
+    
     - name: Lint with flake8
+      run: conda run -n myenv flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, 3.10]
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Add Conda to system path
+      run: echo $CONDA/bin >> $GITHUB_PATH
+    
+    - name: Cache Conda environment
+      uses: actions/cache@v3
+      with:
+        path: $CONDA/envs/myenv
+        key: ${{ runner.os }}-conda-env-${{ hashFiles('environment.yml') }}
+        restore-keys: ${{ runner.os }}-conda-env-
+    
+    - name: Install dependencies
       run: |
-        conda activate myenv
-        conda install -y flake8
-        # Stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        conda env create --file environment.yml --name myenv
+        echo "conda activate myenv" >> $BASH_ENV
     
     - name: Test with pytest
-      run: |
-        conda activate myenv
-        conda install -y pytest
-        pytest
+      run: conda run -n myenv pytest
